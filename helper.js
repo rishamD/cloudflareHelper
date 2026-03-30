@@ -23,8 +23,8 @@ async function handle(req) {
 
   if (!res.ok) {
     return new Response(JSON.stringify({ error: "upstream failed" }), {
-      status": res.status,
-      headers": { "Content-Type": "application/json" },
+      status: res.status,
+      headers: { "Content-Type": "application/json" },
     });
   }
 
@@ -33,7 +33,7 @@ async function handle(req) {
 
   // 2. cache for 60 s inside CF edge (optional but polite)
   return new Response(JSON.stringify({ slugs }), {
-    headers": {
+    headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "public, max-age=60",
