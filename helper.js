@@ -4,7 +4,7 @@ async function handle(req) {
   const url = new URL(req.url);
   const user = url.searchParams.get("user");
   if (!user || user.includes("/")) {
-    return new Response(JSON.stringify({ error": "invalid user" }), {
+    return new Response(JSON.stringify({ error: "invalid user" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
