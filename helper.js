@@ -23,7 +23,8 @@ async function handle(req) {
   if (!res.ok) {
     return new Response(JSON.stringify({ error: "upstream failed" }), {
       status: res.status,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json",
+               "X-Version": "v2.1"},
     });
   }
 
