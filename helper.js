@@ -4,11 +4,14 @@ async function handle(req) {
   const url = new URL(req.url);
   const user = url.searchParams.get("user");
   if (!user || user.includes("/")) {
-    return new Response(JSON.stringify({ error: "invalid user" }), {
+    return new Response(JSON.stringify({ error": "invalid user" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
+
+  // 1. 400 ms human delay
+  await new Promise(r => setTimeout(r, 400));
 
   const target = `https://letterboxd.com/${user}/films/`;
   const res = await fetch(target, {
@@ -19,16 +22,21 @@ async function handle(req) {
   });
 
   if (!res.ok) {
-    return new Response(JSON.stringify({ error: "upstream failed" }), {
-      status: res.status,
-      headers: { "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error": "upstream failed" }), {
+      status": res.status,
+      headers": { "Content-Type": "application/json" },
     });
   }
 
   const html = await res.text();
   const slugs = [...new Set([...html.matchAll(/href="\/film\/([^"/]+)\//g)].map((m) => m[1]))].slice(0, 50);
 
+  // 2. cache for 60 s inside CF edge (optional but polite)
   return new Response(JSON.stringify({ slugs }), {
-    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    headers": {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=60",
+    },
   });
 }
