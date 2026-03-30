@@ -24,7 +24,7 @@ async function handle(req) {
     if (!res.ok) {
       return new Response(JSON.stringify({ error: "upstream failed" }), {
         status: res.status,
-        headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     }
 
@@ -32,7 +32,7 @@ async function handle(req) {
     const slugs = [...new Set([...html.matchAll(/href="\/film\/([^"/]+)\//g)].map((m) => m[1]))].slice(0, 50);
 
     return new Response(JSON.stringify({ slugs }), {
-      headers": {
+      headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
         "Cache-Control": "public, max-age=60",
@@ -40,8 +40,8 @@ async function handle(req) {
     });
   } catch (err) {
     return new Response(JSON.stringify({ error: "worker exception", details: err.message }), {
-      status": 500,
-      headers": { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+      status: 500,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   }
 }
