@@ -35,6 +35,7 @@ async function handle(req) {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
       "Cache-Control": "public, max-age=60",
+      "X-Version": "v2.1",
     },
   });
 }
