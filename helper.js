@@ -1,60 +1,87 @@
-import re
-import json
-import time
-from curl_cffi import requests
-from flask import Flask, request, jsonify
+addEventListener("fetch", (event) => {
+  event.respondWith(
+    handle(event.request).catch((err) => {
+      return new Response(
+        JSON.stringify({ error: "uncaught", details: err.message }),
+        {
+          status: 500,
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Allow-Origin": "*",
+          },
+        }
+      );
+    })
+  );
+});
 
-app = Flask(__name__)
+async function handle(req) {
+  const url = new URL(req.url);
+  const target = url.searchParams.get("url");
 
+  if (!target) {
+    return new Response(JSON.stringify({ error: "missing url parameter" }), {
+      status: 400,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }
 
-def get_film_slugs(lb_user: str) -> dict:
-    if not lb_user or "/" in lb_user:
-        return None, {"error": "invalid user"}, 400
+  let targetUrl;
+  try {
+    targetUrl = new URL(target);
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid url" }), {
+      status: 400,
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
+  }
 
-    time.sleep(0.4)  # polite delay
+  // Strip hop-by-hop headers that shouldn't be forwarded
+  const forbidden = new Set([
+    "host",
+    "cf-connecting-ip",
+    "cf-ipcountry",
+    "cf-ray",
+    "cf-visitor",
+    "x-forwarded-for",
+    "x-forwarded-proto",
+    "x-real-ip",
+  ]);
 
-    target = f"https://letterboxd.com/{lb_user}/films/"
+  const forwardHeaders = new Headers();
+  forwardHeaders.set(
+    "User-Agent",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+  );
+  forwardHeaders.set("Accept-Language", "en-US,en;q=0.9");
 
-    response = requests.get(
-        target,
-        impersonate="chrome122",  # simulates a real Chrome browser via curl_cffi
-    )
+  for (const [key, value] of req.headers.entries()) {
+    if (!forbidden.has(key.toLowerCase())) {
+      forwardHeaders.set(key, value);
+    }
+  }
 
-    if not response.ok:
-        return None, {"error": "upstream failed"}, response.status_code
+  const res = await fetch(targetUrl.toString(), {
+    method: req.method,
+    headers: forwardHeaders,
+    body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body,
+    redirect: "follow",
+  });
 
-    html = response.text
-    slugs = list(
-        dict.fromkeys(
-            m.group(1)
-            for m in re.finditer(r'href="/film/([^"/]+)/', html)
-        )
-    )[:50]
+  const resHeaders = new Headers(res.headers);
+  resHeaders.set("Access-Control-Allow-Origin", "*");
+  resHeaders.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  resHeaders.set("Access-Control-Allow-Headers", "*");
 
-    return slugs, None, None
-
-
-@app.route("/", methods=["GET"])
-def handle():
-    try:
-        lb_user = request.args.get("user", "")
-        slugs, err, status = get_film_slugs(lb_user)
-
-        if err:
-            return jsonify(err), status
-
-        response = jsonify({"slugs": slugs})
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Cache-Control"] = "public, max-age=60"
-        return response
-
-    except Exception as e:
-        return (
-            jsonify({"error": "uncaught", "details": str(e)}),
-            500,
-            {"Access-Control-Allow-Origin": "*"},
-        )
-
-
-if __name__ == "__main__":
-    app.run()
+  return new Response(res.body, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: resHeaders,
+  });
+}
