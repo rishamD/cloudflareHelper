@@ -1,59 +1,60 @@
-addEventListener("fetch", (event) => {
-  event.respondWith(
-    handle(event.request).catch((err) => {
-      // LAST-RESORT: always return CORS even on fatal Worker error
-      return new Response(JSON.stringify({ error: "uncaught", details: err.message }), {
-        status: 500,
-        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      });
-    })
-  );
-});
+import re
+import json
+import time
+from curl_cffi import requests
+from flask import Flask, request, jsonify
 
-async function handle(req) {
-  const user = PROXY_USER;   // Cloudflare env
-  const pass = PROXY_PASS;
-  const proxyUrl = `http://${user}:${pass}@gw.dataimpulse.com:823`;
+app = Flask(__name__)
 
-  const url = new URL(req.url);
-  const lbUser = url.searchParams.get("user");
-  if (!lbUser || lbUser.includes("/")) {
-    return new Response(JSON.stringify({ error: "invalid user" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-    });
-  }
 
-  await new Promise(r => setTimeout(r, 400)); // polite delay
+def get_film_slugs(lb_user: str) -> dict:
+    if not lb_user or "/" in lb_user:
+        return None, {"error": "invalid user"}, 400
 
-  const target = `https://letterboxd.com/${lbUser}/films/`;
+    time.sleep(0.4)  # polite delay
 
-  // ----------  safe proxy call  ----------
-  const res = await fetch(target, {
-    method: "GET",
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-      "Accept-Language": "en-US,en;q=0.9",
-    },
-    // Node-style HTTP proxy – Workers support it
-    dispatcher: new URL(proxyUrl),
-  });
+    target = f"https://letterboxd.com/{lb_user}/films/"
 
-  if (!res.ok) {
-    return new Response(JSON.stringify({ error: "upstream failed" }), {
-      status: res.status,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-    });
-  }
+    response = requests.get(
+        target,
+        impersonate="chrome122",  # simulates a real Chrome browser via curl_cffi
+    )
 
-  const html = await res.text();
-  const slugs = [...new Set([...html.matchAll(/href="\/film\/([^"/]+)\//g)].map((m) => m[1]))].slice(0, 50);
+    if not response.ok:
+        return None, {"error": "upstream failed"}, response.status_code
 
-  return new Response(JSON.stringify({ slugs }), {
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "public, max-age=60",
-    },
-  });
-}
+    html = response.text
+    slugs = list(
+        dict.fromkeys(
+            m.group(1)
+            for m in re.finditer(r'href="/film/([^"/]+)/', html)
+        )
+    )[:50]
+
+    return slugs, None, None
+
+
+@app.route("/", methods=["GET"])
+def handle():
+    try:
+        lb_user = request.args.get("user", "")
+        slugs, err, status = get_film_slugs(lb_user)
+
+        if err:
+            return jsonify(err), status
+
+        response = jsonify({"slugs": slugs})
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Cache-Control"] = "public, max-age=60"
+        return response
+
+    except Exception as e:
+        return (
+            jsonify({"error": "uncaught", "details": str(e)}),
+            500,
+            {"Access-Control-Allow-Origin": "*"},
+        )
+
+
+if __name__ == "__main__":
+    app.run()
